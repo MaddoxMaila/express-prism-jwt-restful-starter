@@ -1,133 +1,98 @@
-import { Request, Response } from "express";
-import { PrismaClient, Admin } from "@prisma/client";
-import ApiResponse from '../../libs/ApiResponse';
-import Define from "../../utils/Define";
-import Helper from "../../utils/Helper";
-import bcryptjs from 'bcryptjs'
+import { Request, Response } from "express"
+import ApiResponse from "../../libs/ApiResponse"
+import { createApiKeyExpireDate, generateAPIKey } from "../../libs/createApiKey"
+import { db, Company } from '../../libs/Db'
+import { CompanyCreated } from "../../libs/types"
 
 
-const db = new PrismaClient()
+    const CompanyController = {
+        addNewCompany: async (req: Request, res: Response) => {
+            try {
+                
+                const { name, email } = req.body
+
+                // check for company email uniqueness
+                const u = await db.company.findUnique({
+                    where: {
+                        email: email,
+                    }
+                })
+                if (u) throw new Error("Already Registered with this email.")
+
+                // generate company api-key
+                const {hashedAPIKey, apiKey} = generateAPIKey(email)
+
+                // check for hashAPIKey uniqueness
+                const api = await db.apikey.findUnique({
+                    where : {
+                        apiKey: hashedAPIKey,
+                    }
+                })
+                if (api) throw new Error("Api key already exists for this email")
+
+                const company = await db.company.create({
+                    data: {
+                        name: name,
+                        email: email,
+                    }
+                })
+
+                if(!company.id) throw new Error("Cannot save company")
+
+                // create apikey for company
+                const apikey = await db.apikey.create({
+                    data: {
+                        apiKey: hashedAPIKey,
+                        expire: createApiKeyExpireDate(365),
+                        companyId: company.id
+                    }
+                })
+                if(api) throw new Error("Apikey not created")
+
+                res.status(200).json(
+                    ApiResponse<CompanyCreated>(false, "company created successfully", {
+                        name: company.name,
+                        email: company.email,
+                        id: company.id,
+                        apikey: apiKey
+                    })
+                )
 
 
-const AdminController = {
-    /**
-     * @description
-     * get email, name, password from req.body
-     * do validatioin
-     * ck already have an account or not(mySql Optional,Mongo required)
-     * create password hash,save into database
-     * generate a jwt access token,set into http cookie
-     * return new user object as response
-    * @param { email, name, password, type } =req.body
-     * @response {error(boolean), message(String), response(object:USER)}
-     */
-    signUp: async (req: Request, res: Response) => {
-        try {
-            const { email, name, password } = req.body
-            //validatioin handle by sequlize
-            if (password.length < 6) {
-                throw new Error("Password Length Should be More than 5 character.")
+            } catch (e: any) {
+                console.log("company creation: ", e);
+                let response = ApiResponse(true, e.message, e);
+                res.json(response);
             }
-            //get hash pass & save new user into db
-            const hashpass = await bcryptjs.hash(password, await bcryptjs.genSalt(10))
-
-            //save on database
-            //const admin = db.admin
-            // const candidate=db.candidte
-            // const company=db.company
-
-            const u = await db.admin.findUnique({
-                where: {
-                    email: email
-                }
-            })
-            if (u) {
-                throw new Error("Already Registered with this email.")
-            }
-            //create the new user.
-            const user = await db.admin.create({
-                data: {
-                    name: name,
-                    email,
-                    password: hashpass
-                }
-            })
-
-            //get token and set into cookie
-            const token = Helper.getJWTtoken(user.id + "")
-            //send token in http cookie with no expire
-            res.cookie(Define.TOKEN, token, Define.SESSION_COOKIE_OPTION)
-
-            //, token-if you want you can pass the token
-            res.status(200).json(ApiResponse<Admin>(false, "user created successfully", user))
-
-        } catch (e: any) {
-            console.log("auth sign up: ", e);
-            let response = ApiResponse(true, e.message, e);
-            res.json(response);
-        }
-    },
-
-    login: async (req: Request, res: Response) => {
-        try {
-
-            const { email, password } = req.body
-            //validatioin
-            if (!email || !password) {
-                throw new Error("Enter email,password")
-            }
-            //check user is available or not in db
-            const u = await db.admin.findUnique({
-                where: {
-                    email: email
-                }
-            })
-            if (!u) {
-                throw new Error("No User Found with this email!")
-            }
-            const user = u!
-
-            //console.log(user);
-            //validate password
-            const ckPass = await bcryptjs.compare(password, user.password)
-            if (!ckPass) {
-                throw new Error("Wrong email or password")
-            }
-
-            //get token and set into cookie
-            const token = Helper.getJWTtoken(user.id + "")
-            //send token in http cookie with no expire
-            res.cookie(Define.TOKEN, token, Define.SESSION_COOKIE_OPTION)
-
-            //, token-if you want you can pass the token
-            res.status(200).json(ApiResponse<Admin>(false, "user logged in successfully", user))
-
-        } catch (e: any) {
-            console.log("auth login: ", e);
-            let response = ApiResponse(true, e.message, e);
-            res.json(response);
-        }
-    },
-    logout: (req: Request, res: Response) => {
-        res.cookie(Define.TOKEN, "", Define.LOGOUT_COOKIE_OPTION)
-        res.status(200).json(ApiResponse(false, "user logged out", true))
-    },
-    isLoggedIn: (req: Request, res: Response) => {
-        try {
-            const token = req.cookies[Define.TOKEN]
-            if (!token) {
-                throw new Error("Unauthorized Access")
-            }
-            //token validation
-            Helper.verifyJWTtoken(token)
-            res.send(true)// logged in
-        } catch (e) {
-            //remove the old/expire token
-            res.cookie("token", "", Define.LOGOUT_COOKIE_OPTION)
-            res.send(false)//not logged in
-        }
+    
+    
+        },
+        deleteCompany: async () => {
+            
+        },
     }
+
+const VehicleController = {
+    addNewVehicle: async () => {
+
+    },
+    deleteVehicle: async () => {
+        
+    },
 }
 
 
-export default AdminController
+const JourneyController = {
+    addNewJourney: async () => {
+        
+    },
+    deleteJourney: async () => {
+
+    }
+}
+
+export {
+    CompanyController,
+    VehicleController,
+    JourneyController
+}
