@@ -1,6 +1,10 @@
-declare namespace Express {
-    export interface Request {
-        uid?: number
+import {Express, Request} from "express";
+
+declare global{
+    namespace Express {
+        interface Request {
+            user?: any,
+        }
     }
 }
 declare namespace NodeJS {
